@@ -66,6 +66,7 @@ class Digest:
     previous: Period
     issues: list[Issue] = field(default_factory=list)
     sessions_enabled: bool = False
+    versions: list[str] = field(default_factory=list)   # app versions counted; [] = all
 
     @property
     def new_issues(self) -> list[Issue]:
@@ -103,7 +104,8 @@ def _pairs(values) -> list[tuple[str, int]]:
     return out
 
 
-def build_digest(headline: list[dict], crash_free: list[dict] | None, issues: list[dict]) -> Digest:
+def build_digest(headline: list[dict], crash_free: list[dict] | None, issues: list[dict],
+                 versions: list[str] | None = None) -> Digest:
     periods = {"current": Period(), "previous": Period()}
     for row in headline:
         p = periods.get(row["period"])
@@ -147,4 +149,5 @@ def build_digest(headline: list[dict], crash_free: list[dict] | None, issues: li
         previous=periods["previous"],
         issues=parsed,
         sessions_enabled=crash_free is not None,
+        versions=list(versions or []),
     )

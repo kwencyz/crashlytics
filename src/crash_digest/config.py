@@ -29,6 +29,7 @@ class Product:
     project_number: str    # project number (digits), used by the Crashlytics API
     app_id: str            # Firebase app ID, e.g. 1:123456789012:android:abc123
     teams_webhook_env: str
+    latest_versions: int = 0   # >0: only count the newest N app versions; 0: all versions
 
     def issue_url(self, issue_id: str) -> str:
         # Same link format the Crashlytics API returns in issue.uri.

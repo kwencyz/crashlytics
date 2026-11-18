@@ -72,6 +72,10 @@ def build_card(
         _text(f"📊 {product.display_name} — daily crash review", weight="Bolder", size="Large"),
         _text(window_label, isSubtle=True, spacing="None", size="Small"),
     ]
+    if digest.versions:
+        n = len(digest.versions)
+        body.append(_text(f"App versions: {', '.join(digest.versions)} (latest {n}, all numbers below)",
+                          isSubtle=True, spacing="None", size="Small"))
 
     if digest.looks_like_no_data:
         body.append(_text(

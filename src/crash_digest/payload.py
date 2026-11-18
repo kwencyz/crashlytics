@@ -58,6 +58,8 @@ def build_ai_payload(digest: Digest, *, product_name: str, window_label: str, to
     return {
         "product": product_name,
         "window": window_label,
+        # Numbers below only count these app versions (empty = all versions).
+        "app_versions_in_scope": list(digest.versions),
         "totals": {
             "current": {
                 "crashes": digest.current.crashes,

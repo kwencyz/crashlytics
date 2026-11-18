@@ -93,8 +93,16 @@ class FakeSession:
             return FakeResp(200, summary(5, 3, 395) if current else summary(1, 1, 380))
         if path == "/reports/topIssues":
             return FakeResp(200, ISSUES)
+        if path == "/reports/topVersions" and p.get("filter.version.display_names"):
+            return FakeResp(400, {"error": {"message": "Request contains an invalid argument."}})  # like the real API
+        if path == "/reports/topVersions" and iid is None:   # "which versions exist" lookup
+            return FakeResp(200, {"groups": [
+                {"version": {"displayVersion": dv, "displayName": dn}, "metrics": [{"eventsCount": "1"}]}
+                for dv, dn in [("3.5.9", "3.5.9 (1)"), ("3.5.13", "3.5.13 (1)"), ("3.5.10", "3.5.10 (1)"),
+                               ("3.5.14", "3.5.14 (2)"), ("3.5.13", "3.5.13 (2)"), ("3.4.30", "3.4.30 (1)")]]})
         if path == "/reports/topVersions":
             return FakeResp(200, {"groups": [{"version": {"displayVersion": "3.5.14"}, "metrics": [{"eventsCount": "2"}]},
+                                             {"version": {"displayVersion": "3.4.25"}, "metrics": [{"eventsCount": "1"}]},
                                              {"version": {"displayVersion": "3.5.8"}, "metrics": [{"eventsCount": "0"}]}]})
         if path == "/reports/topAndroidDevices":
             return FakeResp(200, {"groups": [{"device": {"displayName": "vivo (V2339)"}, "metrics": [{"eventsCount": "2"}]}]})
@@ -128,7 +136,7 @@ def test_issue_rows_and_signals():
     assert crash["frames"] == [{"symbol": "Sdk.a", "file": "SourceFile", "line": 57}]
     assert (crash["blame_file"], crash["blame_line"]) == ("SourceFile", 57)
     assert crash["top_devices"] == [{"value": "vivo (V2339)", "count": 2}]
-    assert crash["top_versions"] == [{"value": "3.5.14", "count": 2}]     # zero-count rows dropped
+    assert crash["top_versions"] == [{"value": "3.5.14", "count": 2}, {"value": "3.4.25", "count": 1}]  # 0s dropped
     assert anr["exception_type"] is None
     assert [f["symbol"] for f in anr["frames"]] == [f"Main.f{i}" for i in range(5)]  # blamed thread, top 5
 
@@ -143,6 +151,31 @@ def test_quota_project_header_sent():
     s = FakeSession()
     _run(s)
     assert all(h["x-goog-user-project"] == "123" for _, _, h in s.calls)
+
+
+def _version_filter(params):
+    return {v for k, v in params if k == "filter.version.display_names"}
+
+
+def test_all_versions_by_default():
+    s = FakeSession()
+    r = _run(s)
+    assert r.versions == []
+    assert all(not _version_filter(p) for _, p, _ in s.calls)
+
+
+def test_latest_versions_filter_applied_to_every_call():
+    product = Product(**{**PRODUCT.__dict__, "latest_versions": 2})
+    s = FakeSession()
+    client = CrashlyticsClient(product, session=s, credentials=FakeCreds(), backoff_s=0)
+    r = run_queries(product, WINDOWS, client=client)
+    assert r.versions == ["3.5.14", "3.5.13"]            # semver order, not text order
+    lookup, rest = s.calls[0], s.calls[1:]
+    assert lookup[0].endswith("/reports/topVersions") and not _version_filter(lookup[1])
+    filtered = [p for u, p, _ in rest if not u.endswith("/reports/topVersions")]
+    assert filtered and all(_version_filter(p) == {"3.5.14 (2)", "3.5.13 (1)", "3.5.13 (2)"} for p in filtered)
+    crash = next(i for i in r.issues if i["issue_id"] == "crash1")
+    assert crash["top_versions"] == [{"value": "3.5.14", "count": 2}]   # out-of-scope 3.4.25 dropped
 
 
 def test_retries_on_503_then_succeeds():

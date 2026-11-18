@@ -137,6 +137,19 @@ def test_card_without_ai_still_has_numbers(digest, product):
     assert "console.firebase.google.com/v1/appid/project/demo-proj/crashlytics/app/1:123:android:abc/issues/" in text
 
 
+def test_card_and_payload_show_version_scope(product):
+    raw = json.loads(FIXTURE.read_text())
+    d = build_digest(raw["headline"], raw["crash_free"], raw["issues"], ["3.5.14", "3.5.13"])
+    text = _card_text(build_card(d, product=product, window_label="w", top_n=5, max_flagged=5,
+                                 triage=None, ai_enabled=False))
+    assert "App versions: 3.5.14, 3.5.13 (latest 2" in text
+    payload = build_ai_payload(d, product_name="Fiuu VT", window_label="w", top_n=5, max_flagged=5)
+    assert payload["app_versions_in_scope"] == ["3.5.14", "3.5.13"]
+    no_scope = build_card(build_digest(raw["headline"], raw["crash_free"], raw["issues"]), product=product,
+                          window_label="w", top_n=5, max_flagged=5, triage=None, ai_enabled=False)
+    assert "App versions" not in _card_text(no_scope)
+
+
 def test_card_no_data_warning(product):
     card = build_card(build_digest([], [], []), product=product, window_label="w", top_n=5,
                       max_flagged=5, triage=None, ai_enabled=True)

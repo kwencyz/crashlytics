@@ -11,9 +11,10 @@ out of a response, so they can't reach the payload, the card or Claude.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import requests
 
@@ -27,6 +28,7 @@ RETRYABLE = {429, 500, 502, 503, 504}
 
 SIGNAL_NEW = "SIGNAL_FRESH"
 SIGNAL_RETURNING = "SIGNAL_REGRESSED"
+VERSION_LOOKBACK = timedelta(days=30)   # where we look for "the newest N versions"
 
 
 class CrashlyticsAPIError(RuntimeError):
@@ -39,6 +41,7 @@ class QueryResults:
     headline: list[dict] = field(default_factory=list)
     crash_free: list[dict] | None = None
     issues: list[dict] = field(default_factory=list)
+    versions: list[str] = field(default_factory=list)   # app versions the numbers are limited to; [] = all
 
 
 class CrashlyticsClient:
@@ -50,6 +53,8 @@ class CrashlyticsClient:
         self._creds = credentials
         self._attempts = attempts
         self._backoff_s = backoff_s
+        # Version displayNames ("3.5.14 (2026111301)") every report/event call is limited to. [] = all.
+        self.version_names: list[str] = []
 
     def _token(self) -> str:
         if self._creds is None:
@@ -91,13 +96,15 @@ class CrashlyticsClient:
         raise CrashlyticsAPIError(f"GET {path} failed: {last}")
 
     def report(self, name: str, start: datetime, end: datetime, *, page_size: int = 10,
-               error_types: tuple[str, ...] = (), issue_id: str | None = None) -> list[dict]:
-        params = _filter(start, end, error_types=error_types, issue_id=issue_id)
+               error_types: tuple[str, ...] = (), issue_id: str | None = None,
+               all_versions: bool = False) -> list[dict]:
+        params = _filter(start, end, error_types=error_types, issue_id=issue_id,
+                         versions=() if all_versions else self.version_names)
         params.append(("page_size", str(page_size)))
         return self.get(f"/reports/{name}", params).get("groups") or []
 
     def latest_event(self, issue_id: str, start: datetime, end: datetime) -> dict | None:
-        params = _filter(start, end, issue_id=issue_id)
+        params = _filter(start, end, issue_id=issue_id, versions=self.version_names)
         params.append(("page_size", "1"))
         events = self.get("/events", params).get("events") or []
         return events[0] if events else None
@@ -107,12 +114,32 @@ def _iso(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _filter(start: datetime, end: datetime, *, error_types=(), issue_id=None) -> list[tuple[str, str]]:
+def _filter(start: datetime, end: datetime, *, error_types=(), issue_id=None, versions=()) -> list[tuple[str, str]]:
     params = [("filter.interval.start_time", _iso(start)), ("filter.interval.end_time", _iso(end))]
     params += [("filter.issue.error_types", t) for t in error_types]
+    params += [("filter.version.display_names", v) for v in versions]
     if issue_id:
         params.append(("filter.issue.id", issue_id))
     return params
+
+
+def _semver(version: str) -> tuple:
+    return tuple(int(p) if p.isdigit() else -1 for p in re.split(r"[.\-+ ]", version))
+
+
+def latest_versions(api: CrashlyticsClient, end: datetime, n: int) -> tuple[list[str], list[str]]:
+    """Newest n app versions seen in the last 30 days.
+
+    Returns (display versions like "3.5.14", every matching displayName like "3.5.14 (2026111301)").
+    The API filter only accepts displayNames, and one version can have several builds.
+    """
+    builds: dict[str, list[str]] = {}
+    for g in api.report("topVersions", end - VERSION_LOOKBACK, end, page_size=100, all_versions=True):
+        v = g.get("version") or {}
+        if v.get("displayVersion") and v.get("displayName"):
+            builds.setdefault(v["displayVersion"], []).append(v["displayName"])
+    newest = sorted(builds, key=_semver, reverse=True)[:n]
+    return newest, [name for dv in newest for name in builds[dv]]
 
 
 def _int(value) -> int | None:
@@ -222,6 +249,13 @@ def run_queries(product: Product, windows: Windows, *, top_n: int = 5, max_flagg
     }
 
     results = QueryResults(crash_free=[])
+    if product.latest_versions > 0:
+        results.versions, api.version_names = latest_versions(api, windows.window_end, product.latest_versions)
+        if not api.version_names:
+            log.warning("[%s] no app versions found in the last 30 days; counting all versions", product.key)
+        else:
+            log.info("[%s] limited to versions %s", product.key, results.versions)
+
     for period, (start, end) in periods.items():
         fatal = _summary(api.report("appSummary", start, end, error_types=("FATAL",)))
         anr = _summary(api.report("appSummary", start, end, error_types=("ANR",)))
@@ -249,8 +283,10 @@ def run_queries(product: Product, windows: Windows, *, top_n: int = 5, max_flagg
 
     for r in _needs_detail(rows, top_n, max_flagged):
         iid = r["issue_id"]
-        r["top_versions"] = _breakdown(api.report("topVersions", start, end, page_size=3, issue_id=iid),
-                                       "version", "displayVersion")
+        # topVersions rejects a version filter (HTTP 400), so fetch all and keep the in-scope ones here.
+        versions = _breakdown(api.report("topVersions", start, end, page_size=10, issue_id=iid, all_versions=True),
+                              "version", "displayVersion")
+        r["top_versions"] = [v for v in versions if not results.versions or v["value"] in results.versions][:3]
         r["top_devices"] = _breakdown(api.report("topAndroidDevices", start, end, page_size=3, issue_id=iid),
                                       "device", "displayName")
         r["top_os"] = _breakdown(api.report("topOperatingSystems", start, end, page_size=3, issue_id=iid),
