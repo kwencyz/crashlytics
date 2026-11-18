@@ -102,6 +102,16 @@ def test_bad_triage_file_still_posts(cfg_path, posts, tmp_path):
     assert "AI summary unavailable" in json.dumps(posts[0], ensure_ascii=False)
 
 
+def test_markers_off_posts_every_run(cfg_path, posts, monkeypatch, tmp_path):
+    cfg = yaml.safe_load(Path(cfg_path).read_text())
+    cfg["settings"]["state_location"] = "none"
+    Path(cfg_path).write_text(yaml.safe_dump(cfg))
+    monkeypatch.setattr(cli, "write_triage", lambda payload, **kw: None)
+    assert cli.main(_args(cfg_path)) == 0
+    assert cli.main(_args(cfg_path)) == 0
+    assert len(posts) == 2
+
+
 def test_dry_run_never_posts(cfg_path, posts, capsys):
     assert cli.main(_args(cfg_path, "--dry-run")) == 0
     assert posts == []

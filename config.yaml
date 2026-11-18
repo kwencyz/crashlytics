@@ -10,8 +10,9 @@ settings:
   max_flagged: 5               # max issues listed under "New" and "Regressed" each
   ai_model: claude-sonnet-5-5
   ai_max_tokens: 1200
-  # Where "already posted today" markers live. gs://bucket/prefix  or  a local folder for dev.
-  state_location: gs://CHANGE_ME-crash-digest-state/markers
+  # Where "already posted today" markers live: gs://bucket/prefix, a local folder for dev,
+  # or none (no double-post protection; razer-vt-bbdd6 has no billing, so no GCS bucket).
+  state_location: none
 
 products:
   vt:

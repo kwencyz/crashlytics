@@ -61,8 +61,9 @@ def run_product(cfg: Config, product: Product, args) -> bool:
         log.error("[%s] %s is not set", product.key, product.teams_webhook_env)
         return False
 
-    markers = MarkerStore(s.state_location) if live else None
-    if live and not args.force and markers.already_posted(product.key, windows.digest_date):
+    markers_on = live and str(s.state_location or "").lower() not in ("", "none")
+    markers = MarkerStore(s.state_location) if markers_on else None
+    if markers and not args.force and markers.already_posted(product.key, windows.digest_date):
         log.info("[%s] already posted for %s; skipping (use --force to re-post)", product.key, windows.digest_date)
         return True
 
@@ -118,7 +119,8 @@ def run_product(cfg: Config, product: Product, args) -> bool:
     except TeamsPostError:
         log.exception("[%s] Teams post failed", product.key)
         return False
-    markers.mark_posted(product.key, windows.digest_date)
+    if markers:
+        markers.mark_posted(product.key, windows.digest_date)
     return True
 
 
