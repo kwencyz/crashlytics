@@ -67,6 +67,16 @@ class Digest:
     issues: list[Issue] = field(default_factory=list)
     sessions_enabled: bool = False
     versions: list[str] = field(default_factory=list)   # app versions counted; [] = all
+    devices: list[dict] = field(default_factory=list)   # [{device, events, users}] from Crashlytics
+
+    def by_crash_type(self, n: int) -> list[dict]:
+        """Issues grouped by exception class (ANRs as their own group), most events first."""
+        groups: dict[tuple[str, str], dict] = {}
+        for i in self.issues:
+            g = groups.setdefault((i.title, i.kind), {"type": i.title, "kind": i.kind, "events": 0, "issues": 0})
+            g["events"] += i.events
+            g["issues"] += 1
+        return sorted(groups.values(), key=lambda g: (g["events"], g["issues"]), reverse=True)[:n]
 
     @property
     def new_issues(self) -> list[Issue]:
@@ -105,7 +115,7 @@ def _pairs(values) -> list[tuple[str, int]]:
 
 
 def build_digest(headline: list[dict], crash_free: list[dict] | None, issues: list[dict],
-                 versions: list[str] | None = None) -> Digest:
+                 versions: list[str] | None = None, devices: list[dict] | None = None) -> Digest:
     periods = {"current": Period(), "previous": Period()}
     for row in headline:
         p = periods.get(row["period"])
@@ -150,4 +160,9 @@ def build_digest(headline: list[dict], crash_free: list[dict] | None, issues: li
         issues=parsed,
         sessions_enabled=crash_free is not None,
         versions=list(versions or []),
+        devices=[
+            {"device": (d.get("device") or "unknown"), "events": int(d.get("events") or 0),
+             "users": int(d.get("users") or 0)}
+            for d in (devices or [])
+        ],
     )

@@ -19,6 +19,8 @@ Write for busy engineers:
   explains WHY it matters (new in a release, concentrated on one device or Android version,
   growing, many users, ANR on a main flow, etc.) and, if the frames suggest it, where to start looking.
 - Prefer new and returning issues, issues concentrated in the latest app version, and high user counts.
+- by_crash_type and by_device summarize all issues in scope; use them to spot one exception class or
+  one device model driving most of the day.
 
 Rules:
 - Only refer to issues by the issue_id values given in the data. Never invent issues.

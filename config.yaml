@@ -22,7 +22,7 @@ products:
     project_number: "585083471171"                       # project number (digits)
     app_id: "1:585083471171:android:58d17f1fd0165f48185bf6"
     teams_webhook_env: TEAMS_WEBHOOK_URL_VT
-    latest_versions: 2        # card only counts the newest 2 app versions (0 = all versions)
+    latest_versions: 1        # card only counts the newest app version (0 = all versions)
 
   vt_plus:
     enabled: false

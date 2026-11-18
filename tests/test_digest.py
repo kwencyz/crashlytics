@@ -150,6 +150,37 @@ def test_card_and_payload_show_version_scope(product):
     assert "App versions" not in _card_text(no_scope)
 
 
+def _issue(iid, error_type, exc, events):
+    return {"issue_id": iid, "error_type": error_type, "events": events, "users": 1, "exception_type": exc}
+
+
+def test_by_crash_type_groups_by_exception_class():
+    d = build_digest([], [], [
+        _issue("a", "FATAL", "java.lang.IllegalStateException", 1),
+        _issue("b", "FATAL", "java.lang.IllegalStateException", 2),
+        _issue("c", "FATAL", "android.os.DeadObjectException", 1),
+        _issue("d", "ANR", None, 2)])
+    assert d.by_crash_type(5) == [
+        {"type": "IllegalStateException", "kind": "Crash", "events": 3, "issues": 2},
+        {"type": "ANR", "kind": "ANR", "events": 2, "issues": 1},
+        {"type": "DeadObjectException", "kind": "Crash", "events": 1, "issues": 1}]
+
+
+def test_card_shows_crash_type_and_device_sections(product):
+    d = build_digest([{"period": "current", "crashes": 3, "anrs": 2, "users_affected": 3}],
+                     [{"period": "current", "active_users": 300, "crashed_users": 2}],
+                     [_issue("a", "FATAL", "java.lang.IllegalStateException", 3), _issue("d", "ANR", None, 2)],
+                     ["3.5.14"], [{"device": "vivo (V2318)", "events": 2, "users": 1}])
+    text = _card_text(build_card(d, product=product, window_label="w", top_n=5, max_flagged=5,
+                                 triage=None, ai_enabled=False))
+    assert "App version: 3.5.14 (latest version" in text
+    assert "By crash type" in text and "IllegalStateException (Crash)" in text and "3 events · 1 issue" in text
+    assert "By device model" in text and "vivo (V2318)" in text and "2 events · 1 user" in text
+    payload = build_ai_payload(d, product_name="Fiuu VT", window_label="w", top_n=5, max_flagged=5)
+    assert payload["by_device"] == [{"device": "vivo (V2318)", "events": 2, "users_affected": 1}]
+    assert payload["by_crash_type"][0]["type"] == "IllegalStateException"
+
+
 def test_card_no_data_warning(product):
     card = build_card(build_digest([], [], []), product=product, window_label="w", top_n=5,
                       max_flagged=5, triage=None, ai_enabled=True)

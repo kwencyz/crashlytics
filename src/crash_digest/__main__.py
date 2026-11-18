@@ -31,7 +31,7 @@ log = logging.getLogger("crash_digest")
 def _load_fixture(path: str) -> QueryResults:
     raw = json.loads(Path(path).read_text())
     return QueryResults(headline=raw["headline"], crash_free=raw.get("crash_free"), issues=raw["issues"],
-                        versions=raw.get("versions") or [])
+                        versions=raw.get("versions") or [], devices=raw.get("devices") or [])
 
 
 def _dump(title: str, obj, out_dir: Path | None, filename: str) -> None:
@@ -90,7 +90,8 @@ def run_product(cfg: Config, product: Product, args) -> bool:
         # Saved so a later live run can post exactly these numbers: --fixture out/<key>_results.json
         _dump("RESULTS", results.__dict__, args.out, f"{product.key}_results.json")
 
-    digest = build_digest(results.headline, results.crash_free, results.issues, results.versions)
+    digest = build_digest(results.headline, results.crash_free, results.issues, results.versions,
+                          results.devices)
 
     # 2. What Claude is allowed to see
     payload = build_ai_payload(digest, product_name=product.display_name, window_label=label,

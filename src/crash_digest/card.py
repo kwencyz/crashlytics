@@ -57,6 +57,17 @@ def _section(title: str, issues: list[Issue], product: Product, tag: str | None 
     ]
 
 
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
+def _breakdown_section(title: str, facts: list[dict]) -> list[dict]:
+    if not facts:
+        return []
+    return [_text(title, weight="Bolder", spacing="Medium", separator=True),
+            {"type": "FactSet", "facts": facts, "spacing": "Small"}]
+
+
 def build_card(
     digest: Digest,
     *,
@@ -74,7 +85,9 @@ def build_card(
     ]
     if digest.versions:
         n = len(digest.versions)
-        body.append(_text(f"App versions: {', '.join(digest.versions)} (latest {n}, all numbers below)",
+        scope = "latest version" if n == 1 else f"latest {n} versions"
+        label = "App version" if n == 1 else "App versions"
+        body.append(_text(f"{label}: {', '.join(digest.versions)} ({scope}, all numbers below)",
                           isSubtle=True, spacing="None", size="Small"))
 
     if digest.looks_like_no_data:
@@ -111,6 +124,16 @@ def build_card(
     elif ai_enabled:
         body.append(_text("🤖 AI summary unavailable today — numbers below are complete.",
                           isSubtle=True, spacing="Medium", separator=True))
+
+    body += _breakdown_section(
+        "🧩 By crash type",
+        [{"title": t["type"] if t["type"] == t["kind"] else f"{t['type']} ({t['kind']})",
+          "value": f"{_plural(t['events'], 'event')} · {_plural(t['issues'], 'issue')}"}
+         for t in digest.by_crash_type(top_n)])
+    body += _breakdown_section(
+        "📱 By device model",
+        [{"title": d["device"], "value": f"{_plural(d['events'], 'event')} · {_plural(d['users'], 'user')}"}
+         for d in digest.devices[:top_n]])
 
     body += _section("🆕 New issues", digest.new_issues[:max_flagged], product)
     body += _section("🔁 Regressed (came back after being closed)", digest.returning_issues[:max_flagged], product)

@@ -29,6 +29,7 @@ RETRYABLE = {429, 500, 502, 503, 504}
 SIGNAL_NEW = "SIGNAL_FRESH"
 SIGNAL_RETURNING = "SIGNAL_REGRESSED"
 VERSION_LOOKBACK = timedelta(days=30)   # where we look for "the newest N versions"
+SAMPLE_LIMIT = 50                       # issues that get a sample event (exception class for "By crash type")
 
 
 class CrashlyticsAPIError(RuntimeError):
@@ -42,6 +43,7 @@ class QueryResults:
     crash_free: list[dict] | None = None
     issues: list[dict] = field(default_factory=list)
     versions: list[str] = field(default_factory=list)   # app versions the numbers are limited to; [] = all
+    devices: list[dict] = field(default_factory=list)    # [{device, events, users}] app-wide, crashes + ANRs
 
 
 class CrashlyticsClient:
@@ -281,7 +283,12 @@ def run_queries(product: Product, windows: Windows, *, top_n: int = 5, max_flagg
                                                error_types=("FATAL", "ANR"))]
     rows = [r for r in rows if r["issue_id"]]
 
-    for r in _needs_detail(rows, top_n, max_flagged):
+    # One sample event per issue gives its exception class (for "By crash type") and top frames.
+    for r in rows[:SAMPLE_LIMIT]:
+        r.update(_sample_fields(api.latest_event(r["issue_id"], start, end)))
+
+    detailed = _needs_detail(rows, top_n, max_flagged)
+    for r in detailed:
         iid = r["issue_id"]
         # topVersions rejects a version filter (HTTP 400), so fetch all and keep the in-scope ones here.
         versions = _breakdown(api.report("topVersions", start, end, page_size=10, issue_id=iid, all_versions=True),
@@ -291,9 +298,17 @@ def run_queries(product: Product, windows: Windows, *, top_n: int = 5, max_flagg
                                       "device", "displayName")
         r["top_os"] = _breakdown(api.report("topOperatingSystems", start, end, page_size=3, issue_id=iid),
                                  "operatingSystem", "displayVersion")
-        r.update(_sample_fields(api.latest_event(iid, start, end)))
+
+    # App-wide "By device model" (crashes + ANRs). Users here are real distinct users per device.
+    results.devices = [
+        {"device": (g.get("device") or {}).get("displayName"),
+         "events": _int(_metrics(g).get("eventsCount")) or 0,
+         "users": _int(_metrics(g).get("impactedUsersCount")) or 0}
+        for g in api.report("topAndroidDevices", start, end, page_size=top_n, error_types=("FATAL", "ANR"))
+    ]
+    results.devices = [d for d in results.devices if d["events"] > 0]
 
     results.issues = rows
-    log.info("[%s] %d issues in window, %d with details", product.key, len(rows),
-             len(_needs_detail(rows, top_n, max_flagged)))
+    log.info("[%s] %d issues in window, %d sampled, %d with details", product.key, len(rows),
+             min(len(rows), SAMPLE_LIMIT), len(detailed))
     return results

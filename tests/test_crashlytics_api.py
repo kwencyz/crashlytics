@@ -104,6 +104,10 @@ class FakeSession:
             return FakeResp(200, {"groups": [{"version": {"displayVersion": "3.5.14"}, "metrics": [{"eventsCount": "2"}]},
                                              {"version": {"displayVersion": "3.4.25"}, "metrics": [{"eventsCount": "1"}]},
                                              {"version": {"displayVersion": "3.5.8"}, "metrics": [{"eventsCount": "0"}]}]})
+        if path == "/reports/topAndroidDevices" and iid is None:   # app-wide "By device model"
+            return FakeResp(200, {"groups": [
+                {"device": {"displayName": "vivo (V2318)"}, "metrics": [{"eventsCount": "2", "impactedUsersCount": "1"}]},
+                {"device": {"displayName": "SUNMI (P2)"}, "metrics": [{"eventsCount": "0", "impactedUsersCount": "0"}]}]})
         if path == "/reports/topAndroidDevices":
             return FakeResp(200, {"groups": [{"device": {"displayName": "vivo (V2339)"}, "metrics": [{"eventsCount": "2"}]}]})
         if path == "/reports/topOperatingSystems":
@@ -139,6 +143,11 @@ def test_issue_rows_and_signals():
     assert crash["top_versions"] == [{"value": "3.5.14", "count": 2}, {"value": "3.4.25", "count": 1}]  # 0s dropped
     assert anr["exception_type"] is None
     assert [f["symbol"] for f in anr["frames"]] == [f"Main.f{i}" for i in range(5)]  # blamed thread, top 5
+
+
+def test_device_breakdown_app_wide():
+    r = _run(FakeSession())
+    assert r.devices == [{"device": "vivo (V2318)", "events": 2, "users": 1}]   # zero rows dropped
 
 
 def test_sensitive_fields_never_copied():

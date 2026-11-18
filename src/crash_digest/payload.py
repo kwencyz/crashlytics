@@ -74,5 +74,13 @@ def build_ai_payload(digest: Digest, *, product_name: str, window_label: str, to
                 "crash_free_users_pct": digest.previous.crash_free_pct,
             },
         },
+        "by_crash_type": [
+            {"type": scrub(t["type"]), "kind": t["kind"], "events": t["events"], "issues": t["issues"]}
+            for t in digest.by_crash_type(top_n)
+        ],
+        "by_device": [
+            {"device": scrub(d["device"]), "events": d["events"], "users_affected": d["users"]}
+            for d in digest.devices[:top_n]
+        ],
         "issues": [_issue_payload(i) for i in chosen.values()],
     }
