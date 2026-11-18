@@ -1,0 +1,39 @@
+# Crash digest configuration.
+# One entry per product. Only VT is enabled for v1; VT+ and CloudECR are placeholders.
+# Find the three IDs in Firebase console → Project settings → General.
+
+settings:
+  timezone: Asia/Kuala_Lumpur
+  digest_hour: 9               # window ends at 09:00 local time on the run day
+  window_hours: 24
+  top_n: 5                     # issues in the "Top issues" section
+  max_flagged: 5               # max issues listed under "New" and "Regressed" each
+  ai_model: claude-sonnet-5-5
+  ai_max_tokens: 1200
+  # Where "already posted today" markers live. gs://bucket/prefix  or  a local folder for dev.
+  state_location: gs://CHANGE_ME-crash-digest-state/markers
+
+products:
+  vt:
+    enabled: true
+    display_name: Fiuu VT
+    gcp_project: razer-vt-bbdd6                          # project ID (text)
+    project_number: "585083471171"                       # project number (digits)
+    app_id: "1:585083471171:android:58d17f1fd0165f48185bf6"
+    teams_webhook_env: TEAMS_WEBHOOK_URL_VT
+
+  vt_plus:
+    enabled: false
+    display_name: Fiuu VT+
+    gcp_project: CHANGE_ME
+    project_number: CHANGE_ME
+    app_id: CHANGE_ME
+    teams_webhook_env: TEAMS_WEBHOOK_URL_VT_PLUS
+
+  cloudecr:
+    enabled: false
+    display_name: CloudECR
+    gcp_project: CHANGE_ME
+    project_number: CHANGE_ME
+    app_id: CHANGE_ME
+    teams_webhook_env: TEAMS_WEBHOOK_URL_CLOUDECR

@@ -1,0 +1,5 @@
+google-auth>=2.30
+google-cloud-storage>=2.18
+anthropic>=0.40
+requests>=2.32
+PyYAML>=6.0
