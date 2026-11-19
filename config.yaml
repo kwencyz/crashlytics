@@ -25,7 +25,7 @@ products:
     latest_versions: 1        # card only counts the newest app version (0 = all versions)
     # Google Play package name for the "Google Play vitals" section ("" = section off).
     # The service account needs read-only access to this app in Play Console (see README).
-    play_package_name: ""
+    play_package_name: "com.rms.mobile.razervt"
 
   vt_plus:
     enabled: false
