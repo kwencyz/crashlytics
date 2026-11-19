@@ -44,6 +44,7 @@ class QueryResults:
     issues: list[dict] = field(default_factory=list)
     versions: list[str] = field(default_factory=list)   # app versions the numbers are limited to; [] = all
     devices: list[dict] = field(default_factory=list)    # [{device, events, users}] app-wide, crashes + ANRs
+    play: dict | None = None   # Google Play vitals (play_vitals.run_play_queries), or {"error": ...}; None = off
 
 
 class CrashlyticsClient:

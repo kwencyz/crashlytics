@@ -23,6 +23,9 @@ products:
     app_id: "1:585083471171:android:58d17f1fd0165f48185bf6"
     teams_webhook_env: TEAMS_WEBHOOK_URL_VT
     latest_versions: 1        # card only counts the newest app version (0 = all versions)
+    # Google Play package name for the "Google Play vitals" section ("" = section off).
+    # The service account needs read-only access to this app in Play Console (see README).
+    play_package_name: ""
 
   vt_plus:
     enabled: false

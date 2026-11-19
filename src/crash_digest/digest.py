@@ -68,6 +68,7 @@ class Digest:
     sessions_enabled: bool = False
     versions: list[str] = field(default_factory=list)   # app versions counted; [] = all
     devices: list[dict] = field(default_factory=list)   # [{device, events, users}] from Crashlytics
+    play: dict | None = None   # Google Play vitals, passed through as-is for the card; None = section off
 
     def by_crash_type(self, n: int) -> list[dict]:
         """Issues grouped by exception class (ANRs as their own group), most events first."""
@@ -115,7 +116,8 @@ def _pairs(values) -> list[tuple[str, int]]:
 
 
 def build_digest(headline: list[dict], crash_free: list[dict] | None, issues: list[dict],
-                 versions: list[str] | None = None, devices: list[dict] | None = None) -> Digest:
+                 versions: list[str] | None = None, devices: list[dict] | None = None,
+                 play: dict | None = None) -> Digest:
     periods = {"current": Period(), "previous": Period()}
     for row in headline:
         p = periods.get(row["period"])
@@ -165,4 +167,5 @@ def build_digest(headline: list[dict], crash_free: list[dict] | None, issues: li
              "users": int(d.get("users") or 0)}
             for d in (devices or [])
         ],
+        play=play,
     )

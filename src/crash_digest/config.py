@@ -30,6 +30,7 @@ class Product:
     app_id: str            # Firebase app ID, e.g. 1:123456789012:android:abc123
     teams_webhook_env: str
     latest_versions: int = 0   # >0: only count the newest N app versions; 0: all versions
+    play_package_name: str = ""   # set to add the Google Play vitals section; "" = no Play section
 
     def issue_url(self, issue_id: str) -> str:
         # Same link format the Crashlytics API returns in issue.uri.

@@ -29,6 +29,16 @@ Cloud Scheduler (09:00 MYT)
 | 🆕 New issues | `topIssues`, Crashlytics' own `SIGNAL_FRESH` flag |
 | 🔁 Regressed: closed, then came back | `topIssues`, Crashlytics' own `SIGNAL_REGRESSED` flag |
 | 🔥 Top 5 by users affected | `topIssues` |
+| ▶️ Google Play vitals (optional) | Play Developer Reporting API: user-perceived crash and ANR rates (day, change vs the day before, 28-day average with a ⚠️ over Play's 1.09% / 0.47% limits), Play users, top Play crash/ANR issues |
+
+The Play section is on when `play_package_name` is set. It uses the same API calls as the
+[play-console-mcp](https://github.com/OrellBuehler/play-console-mcp) server, ported to Python.
+It differs from the Crashlytics numbers on purpose:
+- **Its own day.** Play data is daily in US Pacific days and lags about a day, so the section shows Play's latest full day, not the 24h window.
+- **All app versions.** Play's limits are judged app-wide.
+- **Different users.** Play only counts users who share usage data with Google, so counts won't match Crashlytics.
+- **Not sent to Claude.** The AI payload is Crashlytics-only. Play issue causes are cut to the exception class name; raw Play error reports are never fetched.
+- **Fails soft.** If Play errors, the card still posts with a note, the job logs an ERROR (which trips the Cloud Monitoring alert), and the exit code stays 0 so a re-run doesn't double post.
 
 Edge cases:
 - **No data at all** → a warning card. It doesn't post a reassuring zero.
@@ -56,6 +66,20 @@ products:
     app_id: "1:585083471171:android:58d17f1fd0165f48185bf6"   # under "Your apps"
 ```
 Also set `settings.state_location` to the bucket you create in step 4.
+
+### Optional: Google Play vitals section
+1. Enable the API in the same project:
+   ```bash
+   gcloud services enable playdeveloperreporting.googleapis.com --project <project-id>
+   ```
+2. Play Console → **Users and permissions** → **Invite new users** → the `crash-digest` service account email → **App permissions** → add the app with only **View app information and download bulk reports (read-only)**. No account-level permissions. It can take up to 24h to start working.
+3. Set `play_package_name` for the product in `config.yaml` (e.g. `com.example.app`).
+4. For a local dry run, log in with the Play scope too (user logins ignore scopes asked for in code):
+   ```bash
+   gcloud auth application-default login \
+     --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/playdeveloperreporting
+   ```
+   Your own Google account also needs access to the app in Play Console.
 
 ## 3. Dry run against real data (posts nothing, calls no AI)
 
@@ -138,7 +162,7 @@ A Claude Code cloud routine clones this repo daily at 09:00 MYT (`0 1 * * *` UTC
 No Anthropic API key is needed. The routine's cloud environment needs:
 - env `GOOGLE_SERVICE_ACCOUNT_JSON`: the full JSON key of the `crash-digest` service account (step 4 roles + the marker bucket)
 - env `TEAMS_WEBHOOK_URL_VT`: the Workflows URL
-- network access to `pypi.org`, `files.pythonhosted.org`, `oauth2.googleapis.com`, `firebasecrashlytics.googleapis.com`, `storage.googleapis.com` and your Teams webhook host
+- network access to `pypi.org`, `files.pythonhosted.org`, `oauth2.googleapis.com`, `firebasecrashlytics.googleapis.com`, `storage.googleapis.com`, `playdeveloperreporting.googleapis.com` (if the Play section is on) and your Teams webhook host
 
 Privacy note: in this mode Claude has a shell and the Google credential, so "Claude only sees the payload" is enforced by the routine prompt, not by code.
 
@@ -161,7 +185,7 @@ python -m crash_digest --product vt --fixture out/vt_results.json --triage-file 
 pip install -r requirements-dev.txt
 python -m pytest -q
 ```
-Covers: the API reader's mapping (headline, crash-free %, new/regressed signals, root-cause exception, top frames), sensitive fields never copied out of API responses, the quota-project header, retry on 5xx but not on 403, the payload allow-list and scrubbing, invented issue IDs dropped, cards with and without AI, no-data and clean-day cards, no double post, a failed Teams post failing the job, and an API error posting an error card.
+Covers: the Play reader (latest full day from freshness, rates, paging, NON_FATAL dropped, messages cut from causes, non-Play links dropped), the Play card section and its error note, a Play failure still posting the Crashlytics card, the API reader's mapping (headline, crash-free %, new/regressed signals, root-cause exception, top frames), sensitive fields never copied out of API responses, the quota-project header, retry on 5xx but not on 403, the payload allow-list and scrubbing, invented issue IDs dropped, cards with and without AI, no-data and clean-day cards, no double post, a failed Teams post failing the job, and an API error posting an error card.
 
 ## Adding VT+ / CloudECR later
 Enable the Crashlytics API in their projects (step 1), fill in their `products:` entries, set `enabled: true`, add a `TEAMS_WEBHOOK_URL_*` secret, and either deploy one job per product or drop `--args` to run all enabled products in one job. If the job runs in VT's project, grant the service account the two roles from step 4 on each other project too.

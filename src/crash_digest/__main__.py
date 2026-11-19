@@ -21,6 +21,7 @@ from .config import Config, Product, check_product_ready, load_config
 from .crashlytics_api import QueryResults, run_queries
 from .digest import build_digest
 from .payload import build_ai_payload
+from .play_vitals import run_play_queries
 from .state import MarkerStore
 from .teams import TeamsPostError, post_card
 from .windows import compute_windows
@@ -31,7 +32,18 @@ log = logging.getLogger("crash_digest")
 def _load_fixture(path: str) -> QueryResults:
     raw = json.loads(Path(path).read_text())
     return QueryResults(headline=raw["headline"], crash_free=raw.get("crash_free"), issues=raw["issues"],
-                        versions=raw.get("versions") or [], devices=raw.get("devices") or [])
+                        versions=raw.get("versions") or [], devices=raw.get("devices") or [],
+                        play=raw.get("play"))
+
+
+def _play_vitals(product: Product) -> dict:
+    """Play section data. A Play failure never stops the Crashlytics card: it shows a note instead,
+    and the ERROR log line trips the same Cloud Monitoring alert as any other failure."""
+    try:
+        return run_play_queries(product.play_package_name, product.project_number)
+    except Exception as exc:  # noqa: BLE001
+        log.error("[%s] Play vitals failed: %s", product.key, exc)
+        return {"package": product.play_package_name, "error": type(exc).__name__}
 
 
 def _dump(title: str, obj, out_dir: Path | None, filename: str) -> None:
@@ -77,6 +89,8 @@ def run_product(cfg: Config, product: Product, args) -> bool:
             if problems:
                 raise RuntimeError("; ".join(problems))
             results = run_queries(product, windows, top_n=s.top_n, max_flagged=s.max_flagged)
+            if product.play_package_name:
+                results.play = _play_vitals(product)
     except Exception as exc:  # noqa: BLE001
         log.exception("[%s] query failed", product.key)
         if live:
@@ -91,7 +105,7 @@ def run_product(cfg: Config, product: Product, args) -> bool:
         _dump("RESULTS", results.__dict__, args.out, f"{product.key}_results.json")
 
     digest = build_digest(results.headline, results.crash_free, results.issues, results.versions,
-                          results.devices)
+                          results.devices, results.play)
 
     # 2. What Claude is allowed to see
     payload = build_ai_payload(digest, product_name=product.display_name, window_label=label,
